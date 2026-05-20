@@ -1,4 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
@@ -22,13 +23,20 @@ from .decorators import *
 
 
 
+
 def LandingPageView(request):
-    """ landing page """
+    """ Landing page """
+
     if request.user.is_authenticated:
         messages.info(request, "You are already logged in.")
-        return redirect(request.META.get('HTTP_REFERER', 'landingpage'))  # if no referer, fallback to home
+        return redirect('dashboardpage')  # or wherever you want
+
+    # Only flush/create for anonymous users
+    if not request.session.session_key:
+        request.session.create()
 
     return render(request, 'firstApp/landingpage.html')
+
 
 
 
@@ -57,22 +65,30 @@ def LoginPageView(request):
     if request.method == 'POST':
         email = request.POST.get('email')  # Get the email from the form
         password = request.POST.get('password')  # Get the password from the form
+        remember_me = request.POST.get('remember_me')
 
-        # Debugging: Print email and password for debugging purposes
-        print(f"Attempting to log in with email: {email}")
+
 
         # Attempt to authenticate the user using email and password
         user = authenticate(request, email=email, password=password)
 
         if user is not None:
-            # If user is authenticated, log them in
-            print(f"Login successful for email: {email}")
             login(request, user)
-            return redirect('dashboardpage')  # Redirect to the home page or wherever you'd like
+
+            # Handle "Remember Me"
+            if not remember_me:
+                request.session.set_expiry(0)  # Expires on browser close
+            else:
+                request.session.set_expiry(None)  # Uses default expiry (2 weeks)
+
+            return redirect('dashboardpage')
         else:
-            # If authentication fails, show an error message
-            print(f"Authentication failed for email: {email}")
-            messages.error(request, "Invalid email or password.")
+            # Check if the email exists to give a specific error message
+            from .models import CustomUser
+            if not CustomUser.objects.filter(email=email).exists():
+                messages.error(request, 'email')
+            else:
+                messages.error(request, 'password')
 
     return render(request, 'auth/login.html')
 
@@ -89,8 +105,8 @@ def CalenderPageView(request):
     
     # Get current date for dynamic month/year display
     today = datetime.today()
-    month = today.month
-    year = today.year
+    month = int(request.GET.get('month', today.month))
+    year = int(request.GET.get('year', today.year))
     
     # Generate calendar for the month
     cal = calendar.Calendar(firstweekday=6)  # Starts on Sunday
@@ -102,25 +118,18 @@ def CalenderPageView(request):
         week_days = []
         for day in week:
             if day != 0:  # If day is not 0, it is a valid day of the month
-                # Check if there is a uniform posted for this day
                 uniform = Uniform.objects.filter(uniform_date__year=year, uniform_date__month=month, uniform_date__day=day).first()
-                
-                if uniform:
-                    week_days.append({
-                        'day': day,
-                        'is_current_month': True,
-                        'uniform': uniform,
-                    })
-                else:
-                    week_days.append({
-                        'day': day,
-                        'is_current_month': True,
-                        'uniform': None,
-                    })
+                week_days.append({
+                    'day': day,
+                    'is_current_month': True,
+                    'is_today': day == today.day and month == today.month and year == today.year,
+                    'uniform': uniform,
+                })
             else:
                 week_days.append({
                     'day': '',
                     'is_current_month': False,
+                    'is_today': False,
                     'uniform': None,
                 })
         days_of_week.append(week_days)
@@ -185,35 +194,93 @@ def CalenderPageView(request):
 @login_required(login_url='loginpage')
 @admin_and_secretary_required
 def RecordservicePageView(request):
-    if request.method == 'POST':
+    edit_mode = False
+    service_to_edit = None
+    
+    # UPDATE HANDLER
+    if 'edit_id' in request.POST:
+        service_id = request.POST.get('edit_id')
+        service = get_object_or_404(ServiceRendered, id=service_id)
+        form = ServiceRenderedForm(request.POST, instance=service)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Service record updated successfully.")
+            return redirect(reverse('recordservicepage') + '?list=1')
+        else:
+            messages.error(request, "Failed to update service. Please check your inputs.")
+            return redirect(reverse('recordservicepage') + '?list=1')
+    # DELETE HANDLER
+    elif 'delete_id' in request.POST:
+        service_id = request.POST.get('delete_id')
+        service = get_object_or_404(ServiceRendered, id=service_id)
+        service.delete()
+        messages.success(request, "Service record deleted successfully.")
+        return redirect(reverse('recordservicepage') + '?list=1')
+    elif request.method == 'POST':
+        # NEW RECORD SUBMISSION
         form = ServiceRenderedForm(request.POST)
         if form.is_valid():
             form.save()
-            form = ServiceRenderedForm()
             messages.success(request, "Service recorded successfully.")
-            
-        else:
-            print(form.errors)
+            return redirect(reverse('recordservicepage') + '?list=1')
     else:
+        # DEFAULT - Empty form
         form = ServiceRenderedForm()
 
-    services = ServiceRendered.objects.order_by('-created_at')
+    # Filtering
+    filter_staff = request.GET.get('filter_staff', '')
+    filter_date_from = request.GET.get('filter_date_from', '')
+    filter_date_to = request.GET.get('filter_date_to', '')
 
+    services = ServiceRendered.objects.all()
+    if filter_staff:
+        services = services.filter(staff_name_id=filter_staff)
+    if filter_date_from:
+        services = services.filter(created_at__date__gte=filter_date_from)
+    if filter_date_to:
+        services = services.filter(created_at__date__lte=filter_date_to)
+    services = services.order_by('-created_at')
     orders = Order.objects.select_related('client', 'product').order_by('-created_at')
     order_count = orders.count()
-
-    # Booking form logic...
     total_bookings = SpaSessionBooking.objects.count()
     all_bookings = SpaSessionBooking.objects.all()
+
+    staff_users = CustomUser.objects.filter(is_not_secretary=True)
+
+    # Serialize services for the edit modal
+    services_json = []
+    for s in services:
+        services_json.append({
+            'id': s.id,
+            'staff_name': s.staff_name_id,
+            'amount': str(s.amount),
+            'mode_of_payment': s.mode_of_payment,
+            'service_type': s.service_type,
+            'service_rendered': s.service_rendered,
+            'description': s.description,
+            'staff_role': s.staff_role,
+            'customer_name': s.customer_name,
+            'invoice_number': s.invoice_number,
+            'payment_status': s.payment_status,
+            'start_time': s.start_time.strftime('%H:%M') if s.start_time else '',
+            'end_time': s.end_time.strftime('%H:%M') if s.end_time else '',
+        })
 
     context = {
         'form': form,
         'services': services,
+        'services_json': json.dumps(services_json),
         'orders': orders,
         'order_count': order_count,
         'status_choices': Order.STATUS_CHOICES,
         'total_bookings': total_bookings,
         'all_bookings': all_bookings,
+        'edit_mode': edit_mode,
+        'service_to_edit': service_to_edit,
+        'filter_staff': filter_staff,
+        'filter_date_from': filter_date_from,
+        'filter_date_to': filter_date_to,
+        'staff_users': staff_users,
     }
     return render(request, 'auth/recordservice.html', context)
 
@@ -265,12 +332,23 @@ def ProfilePageView(request):
 
 @login_required(login_url='loginpage')
 def ProductPage(request):
-    if request.method == 'POST':
+    if 'edit_id' in request.POST:
+        product_id = request.POST.get('edit_id')
+        product = get_object_or_404(Product, id=product_id)
+        form = ProductForm(request.POST, request.FILES, instance=product)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Product updated successfully.")
+            return redirect(reverse('productspage') + '?list=1')
+        else:
+            messages.error(request, "Failed to update product.")
+            return redirect(reverse('productspage') + '?list=1')
+    elif request.method == 'POST':
         form = ProductForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
-            form = ProductForm()
             messages.success(request, "Product Added Successfully.")
+            return redirect(reverse('productspage') + '?list=1')
     else:
         form = ProductForm()
 
@@ -283,9 +361,20 @@ def ProductPage(request):
     total_bookings = SpaSessionBooking.objects.count()
     all_bookings = SpaSessionBooking.objects.all()
 
+    products_json = []
+    for p in products:
+        products_json.append({
+            'id': p.id,
+            'name': p.name,
+            'description': p.description,
+            'price': str(p.price),
+            'uploaded_file_url': p.uploaded_file.url if p.uploaded_file else '',
+        })
+
     context = {
         'form': form,
         'products': products,
+        'products_json': json.dumps(products_json),
         'orders': orders,
         'order_count': order_count,
         'status_choices': Order.STATUS_CHOICES,
@@ -388,11 +477,27 @@ def UpdateProfileView(request):
 def RecordexpensesPageView(request):
     """ Expense recording page """
     if request.method == 'POST':
-        form = ExpenseForm(request.POST)
-        if form.is_valid():
-            form.save()  # Save the form data to the database
-            form = ExpenseForm()
-            messages.success(request, "Expense recorded successfully.")
+        if 'delete_id' in request.POST:
+            expense_id = request.POST.get('delete_id')
+            expense = get_object_or_404(Expense, id=expense_id)
+            expense.delete()
+            messages.success(request, "Expense deleted successfully.")
+            return redirect('recordexpensespage')
+
+        expense_id = request.POST.get('expense_id')
+        if expense_id:
+            expense = get_object_or_404(Expense, id=expense_id)
+            form = ExpenseForm(request.POST, instance=expense)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Expense updated successfully.")
+                return redirect('recordexpensespage')
+        else:
+            form = ExpenseForm(request.POST)
+            if form.is_valid():
+                form.save()
+                form = ExpenseForm()
+                messages.success(request, "Expense recorded successfully.")
     else:
         form = ExpenseForm()
 
@@ -414,9 +519,11 @@ def RecordexpensesPageView(request):
         # Return JSON data for AJAX request
         expenses_data = [
             {
+                'id': expense.id,
                 'amount': expense.amount,
                 'description': expense.description,
                 'category': expense.get_category_display(),
+                'category_key': expense.category,
                 'date': expense.date.strftime('%Y-%m-%d %H:%M')
             }
             for expense in expenses
@@ -909,14 +1016,17 @@ def JobsPage(request):
     year = request.GET.get('year')
 
     services = ServiceRendered.objects.filter(staff_name=user)
+    
+    # Apply filters if provided (month-only, year-only, or both)
+    if month:
+        services = services.filter(service_date__month=int(month))
+    if year:
+        services = services.filter(service_date__year=int(year))
 
     total_amount = services.aggregate(Sum('amount'))['amount__sum'] or 0
 
-    if month and year:
-        services = services.filter(
-            service_date__month=int(month),
-            service_date__year=int(year)
-        )
+    
+
 
     # For the filter dropdowns
     current_year = datetime.now().year
@@ -955,46 +1065,76 @@ def download_report(request):
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    left_margin = 50
-    right_margin = width - 50
-    top_margin = height - 50
-    bottom_margin = 50
+    margin = 60
+    page_width = width - 2 * margin
 
-    y = top_margin
+    y = height - 40
 
     def new_page():
         nonlocal y
         p.showPage()
-        y = top_margin
+        y = height - 40
+        # Draw footer
+        p.setFont("Helvetica", 8)
+        p.setFillColor(colors.grey)
+        p.drawCentredString(width / 2, 20, f"Rite Living Spa — Monthly Report — Page {p.getPageNumber()}")
+        p.setFillColor(colors.black)
 
-    def draw_table_header(x_list, header_texts, y_position):
-        p.setFont("Helvetica-Bold", 12)
-        for i, text in enumerate(header_texts):
-            p.drawString(x_list[i] + 2, y_position, text)
+    def draw_th(x, y_pos, w, texts, widths):
+        p.setStrokeColor(colors.HexColor('#4e57d4'))
+        p.setLineWidth(1.5)
+        p.line(x, y_pos, x + w, y_pos)
+        p.setStrokeColor(colors.black)
+        p.setLineWidth(1)
+        p.setFillColor(colors.HexColor('#4e57d4'))
+        p.setFont("Helvetica-Bold", 9)
+        cx = x
+        for i, text in enumerate(texts):
+            p.drawString(cx + 4, y_pos + 4, text)
+            cx += widths[i]
+        p.setFillColor(colors.black)
 
-        # Draw header line under titles
-        p.line(x_list[0], y_position - 2, x_list[-1] + 100, y_position - 2)
+    def draw_tr(x, y_pos, w, texts, widths, is_alt=False):
+        if is_alt:
+            p.setFillColor(colors.HexColor('#f5f5f5'))
+            p.rect(x, y_pos - 2, w, 18, fill=1, stroke=0)
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica", 9)
+        cx = x
+        for i, text in enumerate(texts):
+            p.drawString(cx + 4, y_pos + 2, str(text))
+            cx += widths[i]
 
-    # Draw Title
-    p.setFont("Helvetica-Bold", 20)
-    p.drawCentredString(width / 2, y, f"Monthly Report - {calendar.month_name[month]} {year}")
-    y -= 50
-
-    ## ------------------- Staff Services Section -------------------
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(left_margin, y, "Staff Services")
+    # ---- Header ----
+    p.setFont("Helvetica-Bold", 22)
+    p.setFillColor(colors.HexColor('#4e57d4'))
+    p.drawCentredString(width / 2, y, "RITE LIVING SPA")
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica", 11)
+    p.drawCentredString(width / 2, y - 18, f"Monthly Financial Report — {calendar.month_name[month]} {year}")
+    y -= 45
+    p.setStrokeColor(colors.HexColor('#4e57d4'))
+    p.setLineWidth(1.5)
+    p.line(margin, y, width - margin, y)
     y -= 30
+
+    # ---- Income Section ----
+    p.setFont("Helvetica-Bold", 14)
+    p.setFillColor(colors.HexColor('#2e7d32'))
+    p.drawString(margin, y, "Services Rendered")
+    p.setFillColor(colors.black)
+    y -= 20
 
     staff_members = CustomUser.objects.filter(is_not_secretary=True)
     total_income = 0
 
-    # Table Column Positions
-    x_list = [left_margin, left_margin + 150, left_margin + 350]
+    col_widths = [140, page_width - 140 - 100, 100]
+    x_list = [margin, margin + col_widths[0], margin + col_widths[0] + col_widths[1]]
 
-    # Draw the table header
-    draw_table_header(x_list, ["Staff Name", "Service Rendered", "Amount (₦)"], y)
+    draw_th(margin, y - 2, page_width, ["Staff", "Service", "Amount (₦)"], col_widths)
     y -= 25
 
+    alt = False
     for staff in staff_members:
         services = ServiceRendered.objects.filter(
             staff_name=staff,
@@ -1002,109 +1142,113 @@ def download_report(request):
             service_date__year=year,
             payment_status='confirmed'
         )
-
         if services.exists():
-            staff_full_name = f"{staff.first_name} {staff.last_name}"
-
+            staff_name = f"{staff.first_name} {staff.last_name}"
             staff_total = 0
-
             for service in services:
-                if y < bottom_margin + 50:
+                if y < 100:
                     new_page()
-                    p.setFont("Helvetica-Bold", 16)
-                    p.drawString(left_margin, y, "Staff Services (contd)")
-                    y -= 30
-                    draw_table_header(x_list, ["Staff Name", "Service Rendered", "Amount (₦)"], y)
+                    draw_th(margin, y - 2, page_width, ["Staff", "Service", "Amount (₦)"], col_widths)
                     y -= 25
-
-                p.setFont("Helvetica", 11)
-                p.drawString(x_list[0] + 2, y, staff_full_name)
-                p.drawString(x_list[1] + 2, y, service.service_rendered or "N/A")
-                p.drawString(x_list[2] + 2, y, f"{service.amount:,.2f}")
-                y -= 18
-
+                draw_tr(margin, y, page_width,
+                    [staff_name, service.service_rendered or "N/A", f"NGN {service.amount:,.2f}"],
+                    col_widths, alt)
                 staff_total += service.amount
-
-            # Staff Subtotal row
-            p.setFont("Helvetica-Bold", 11)
-            p.drawString(x_list[1] + 2, y, f"Subtotal for {staff_full_name}")
-            p.drawString(x_list[2] + 2, y, f"{staff_total:,.2f}")
-            y -= 25
-
+                y -= 20
+                alt = not alt
+            # Subtotal
+            p.setFont("Helvetica-Bold", 9)
+            p.drawString(x_list[1] + 4, y + 3, f"Subtotal — {staff_name}")
+            p.drawString(x_list[2] + 4, y + 3, f"NGN {staff_total:,.2f}")
+            y -= 22
             total_income += staff_total
 
+    if total_income == 0:
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.grey)
+        p.drawString(margin + 10, y - 5, "No services recorded for this period.")
+        p.setFillColor(colors.black)
+        y -= 25
+
     # Total Income
-    p.setStrokeColor(colors.black)
-    p.line(left_margin, y, right_margin, y)
+    y -= 5
+    p.setStrokeColor(colors.HexColor('#2e7d32'))
+    p.line(margin, y, width - margin, y)
     y -= 20
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(left_margin, y, f"Total Income: ₦{total_income:,.2f}")
-    y -= 40
+    p.setFont("Helvetica-Bold", 13)
+    p.setFillColor(colors.HexColor('#2e7d32'))
+    p.drawString(margin, y, f"Total Income:  NGN {total_income:,.2f}")
+    p.setFillColor(colors.black)
+    y -= 35
 
-    ## ------------------- Expenses Section -------------------
-    if y < bottom_margin + 100:
+    # ---- Expenses Section ----
+    if y < 120:
         new_page()
-
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(left_margin, y, "Expenses")
-    y -= 30
-
-    # Table Column Positions for Expenses
-    x_expense_list = [left_margin, left_margin + 250, left_margin + 400]
-
-    draw_table_header(x_expense_list, ["Category", "Description", "Amount (₦)"], y)
-    y -= 25
+    p.setFont("Helvetica-Bold", 14)
+    p.setFillColor(colors.HexColor('#c62828'))
+    p.drawString(margin, y, "Expenses")
+    p.setFillColor(colors.black)
+    y -= 20
 
     expenses = Expense.objects.filter(date__month=month, date__year=year)
     total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or 0
 
-    if expenses.exists():
-        for expense in expenses:
-            if y < bottom_margin + 50:
-                new_page()
-                p.setFont("Helvetica-Bold", 16)
-                p.drawString(left_margin, y, "Expenses (contd)")
-                y -= 30
-                draw_table_header(x_expense_list, ["Category", "Description", "Amount (₦)"], y)
-                y -= 25
+    exp_col_widths = [120, page_width - 120 - 100, 100]
+    draw_th(margin, y - 2, page_width, ["Category", "Description", "Amount (₦)"], exp_col_widths)
+    y -= 25
 
-            p.setFont("Helvetica", 11)
-            p.drawString(x_expense_list[0] + 2, y, expense.category.capitalize())
-            p.drawString(x_expense_list[1] + 2, y, (expense.description[:30] + '...') if len(expense.description) > 30 else expense.description)
-            p.drawString(x_expense_list[2] + 2, y, f"{expense.amount:,.2f}")
-            y -= 18
-    else:
-        p.setFont("Helvetica", 12)
-        p.drawString(left_margin + 10, y, "No expenses recorded.")
+    alt = False
+    for expense in expenses:
+        if y < 100:
+            new_page()
+            draw_th(margin, y - 2, page_width, ["Category", "Description", "Amount (₦)"], exp_col_widths)
+            y -= 25
+        draw_tr(margin, y, page_width,
+            [expense.get_category_display(),
+             (expense.description[:40] + '...') if expense.description and len(expense.description) > 40 else (expense.description or '—'),
+             f"NGN {expense.amount:,.2f}"],
+            exp_col_widths, alt)
         y -= 20
+        alt = not alt
+
+    if not expenses:
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.grey)
+        p.drawString(margin + 10, y - 5, "No expenses recorded for this period.")
+        p.setFillColor(colors.black)
+        y -= 25
 
     # Total Expenses
-    p.setStrokeColor(colors.black)
-    p.line(left_margin, y, right_margin, y)
+    y -= 5
+    p.setStrokeColor(colors.HexColor('#c62828'))
+    p.line(margin, y, width - margin, y)
     y -= 20
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(left_margin, y, f"Total Expenses: ₦{total_expenses:,.2f}")
-    y -= 40
+    p.setFont("Helvetica-Bold", 13)
+    p.setFillColor(colors.HexColor('#c62828'))
+    p.drawString(margin, y, f"Total Expenses:  NGN {total_expenses:,.2f}")
+    p.setFillColor(colors.black)
+    y -= 35
 
-    ## ------------------- Net Profit Section -------------------
-    if y < bottom_margin + 100:
+    # ---- Net Profit Section ----
+    if y < 120:
         new_page()
-
     final_profit = total_income - total_expenses
 
-    p.setFont("Helvetica-Bold", 18)
-    p.drawString(left_margin, y, "Net Profit Summary")
+    y -= 5
+    p.setStrokeColor(colors.HexColor('#4e57d4'))
+    p.setLineWidth(2)
+    p.line(margin, y, width - margin, y)
     y -= 25
-    p.setStrokeColor(colors.grey)
-    p.line(left_margin, y, right_margin, y)
+    p.setFont("Helvetica-Bold", 16)
+    p.setFillColor(colors.HexColor('#4e57d4'))
+    p.drawString(margin, y, "Net Profit Summary")
+    p.setFillColor(colors.black)
     y -= 30
 
-    p.setFont("Helvetica-Bold", 16)
-    if final_profit >= 0:
-        p.setFillColor(colors.green)
-    else:
-        p.setFillColor(colors.red)
-    p.drawString(left_margin, y, f"Net Profit: ₦{final_profit:,.2f}")
+    profit_color = colors.HexColor('#2e7d32') if final_profit >= 0 else colors.HexColor('#c62828')
+    p.setFont("Helvetica-Bold", 18)
+    p.setFillColor(profit_color)
+    p.drawString(margin + 20, y, f"Net Profit:  NGN {final_profit:,.2f}")
     p.setFillColor(colors.black)
 
     p.showPage()

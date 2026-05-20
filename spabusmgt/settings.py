@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
 
     'allauth',
     'allauth.account',
@@ -55,6 +56,8 @@ INSTALLED_APPS = [
 
     # new app
     'firstApp',
+
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -133,10 +136,21 @@ WSGI_APPLICATION = 'spabusmgt.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    'default' : {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'kjyivvuv_ritelivingspadb',
+        'USER': 'kjyivvuv_ritelivingspadbuser',
+        'PASSWORD': 'ritelivingspa123RITELIVINGSPA',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
@@ -172,8 +186,19 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+
+# Security settings
+SESSION_COOKIE_SECURE = True       # Send cookie only over HTTPS
+SESSION_COOKIE_HTTPONLY = True     # JavaScript can't access it
+SESSION_COOKIE_SAMESITE = 'Lax'    # Protects from CSRF
+
+# Optional: Customize session length
+SESSION_COOKIE_AGE = 1209600  # 2 weeks (in seconds)
+
 
 
 # STATIC FILES
@@ -184,12 +209,10 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = BASE_DIR / "staticfiles"  # For 'collectstatic' in production
 
-# MEDIA FILES (Images & Uploads)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+

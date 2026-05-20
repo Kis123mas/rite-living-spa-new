@@ -72,8 +72,8 @@ class ServiceRendered(models.Model):
     
     # Type of service (Solo or Contract)
     SERVICE_TYPE_CHOICES = [
-        ('solo', 'Solo'),
-        ('contract', 'Contract'),
+        ('spa', 'Spa'),
+        ('home', 'Home'),
     ]
     service_type = models.CharField(max_length=10, choices=SERVICE_TYPE_CHOICES)
 
@@ -139,6 +139,8 @@ class ServiceRendered(models.Model):
     
     # Timestamp for when the service record was created
     created_at = models.DateTimeField(auto_now_add=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
     
     # Optionally, a status field to track whether the payment has been confirmed or pending
     PAYMENT_STATUS_CHOICES = [

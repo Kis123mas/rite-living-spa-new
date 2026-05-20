@@ -33,9 +33,6 @@
             <div class="col-md-4">
                 <label for="year" class="form-label">Select Year</label>
                 <select class="form-select" id="year" name="year">
-                    <option value="2023">2023</option>
-                    <option value="2024" selected>2024</option>
-                    <option value="2025">2025</option>
                 </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">
@@ -258,6 +255,22 @@
 
 
 <script>
+    // Populate year dropdown dynamically
+    (function() {
+        const yearSelect = document.getElementById('year');
+        if (yearSelect) {
+            const currentYear = new Date().getFullYear();
+            const selectedYear = {{ year }};
+            for (let y = currentYear; y >= 2023; y--) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                if (y === selectedYear) opt.selected = true;
+                yearSelect.appendChild(opt);
+            }
+        }
+    })();
+
     document.addEventListener('DOMContentLoaded', function () {
         const modal = new bootstrap.Modal(document.getElementById('jobsModal'));
         const jobList = document.getElementById('jobList');

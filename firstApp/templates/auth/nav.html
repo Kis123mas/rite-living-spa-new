@@ -48,7 +48,8 @@
             <li class="nav-item dropdown">
                 <a href="#" data-bs-toggle="dropdown" class="nav-icon pe-md-0">
                     <img src="{% if request.user.profile.profile_picture %}{{ request.user.profile.profile_picture.url }}{% else %}{% static 'firstApp/images/defaultprofile.png' %}{% endif %}"
-                        class="avatar img-fluid rounded" alt="Profile Picture">
+                        class="avatar img-fluid rounded" alt="Profile Picture"
+                        onerror="this.onerror=null; this.src='{% static 'firstApp/images/defaultprofile.png' %}'">
                 </a>
                 <div class="dropdown-menu dropdown-menu-end">
                     <a href="{% url 'profilepage' %}" class="dropdown-item">Profile</a>

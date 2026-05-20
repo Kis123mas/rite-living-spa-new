@@ -59,33 +59,54 @@
                                 class="img-fluid" width="100">
                             <h4 class="mt-3 text" style="color: #4e57d4;">Access Your Account</h4>
                         </div>
-                        <form method="post">
+                        <form method="post" id="loginForm" novalidate>
                             {% csrf_token %}
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email Address</label>
                                 <input type="email" class="form-control" id="email" name="email"
-                                    placeholder="Enter your email" required>
+                                    placeholder="Enter your email">
+                                <div class="invalid-feedback" id="emailError">Please enter your email address.</div>
                             </div>
                             <div class="mb-3">
                                 <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password"
-                                    placeholder="Enter your password" required>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="password" name="password"
+                                        placeholder="Enter your password">
+                                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                        <i class="bi bi-eye-slash" id="togglePasswordIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="invalid-feedback" id="passwordError">Please enter your password.</div>
+                            </div>
+                            <!-- Remember Me Checkbox -->
+                            <div class="form-check mb-3">
+                                <input type="checkbox" class="form-check-input" id="remember_me" name="remember_me">
+                                <label class="form-check-label" for="remember_me">Remember Me</label>
                             </div>
                             <button type="submit" class="btn w-100 rounded-pill"
                                 style="background-color: #4e57d4; color: white; border: none;">
                                 Login
                             </button>
-                            <!-- {% if messages %}
+                            {% if messages %}
                             <div class="mt-3">
                                 {% for message in messages %}
-                                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                    {% if message.message == 'email' %}
+                                        The email address is not registered.
+                                    {% elif message.message == 'password' %}
+                                        Incorrect password.
+                                    {% else %}
+                                        {{ message }}
+                                    {% endif %}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
                                 {% endfor %}
                             </div>
-                            {% endif %} -->
+                            {% endif %}
 
                         </form>
 
-                        <div class="text-center my-3">
+                        <!-- <div class="text-center my-3">
                             <span class="text-muted">or</span>
                         </div>
 
@@ -97,7 +118,7 @@
                             <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo"
                                 style="width: 20px; height: 20px;">
                             <span>Login with Google</span>
-                        </a>
+                        </a> -->
                         <div class="text-center">
                             <small>Don't have an account? <a href="{% url 'registerpage' %}" class="text"
                                     style="color: #4e57d4;">Register here</a></small>
@@ -108,21 +129,7 @@
         </div>
     </section>
 
-    <!-- sticky social media -->
-    <section class="sticky-social-icon">
-        <a href="https://whatsapp.com">
-            <i class="ri-whatsapp-line"></i>
-        </a>
-        <a href="https://youtube.com">
-            <i class="ri-youtube-line"></i>
-        </a>
-        <a href="">
-            <i class="ri-instagram-line"></i>
-        </a>
-        <a href="">
-            <i class="ri-facebook-circle-line"></i>
-        </a>
-    </section>
+
 
 
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"
@@ -134,6 +141,101 @@
     <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.umd.js"></script>
     <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
     <script src="{% static 'firstApp/js/main.js' %}"></script>
+    <script>
+        // Password visibility toggle
+        document.getElementById('togglePassword').addEventListener('click', function() {
+            const passwordInput = document.getElementById('password');
+            const icon = document.getElementById('togglePasswordIcon');
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.classList.remove('bi-eye-slash');
+                icon.classList.add('bi-eye');
+            } else {
+                passwordInput.type = 'password';
+                icon.classList.remove('bi-eye');
+                icon.classList.add('bi-eye-slash');
+            }
+        });
+
+        (function() {
+            const form = document.getElementById('loginForm');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const emailError = document.getElementById('emailError');
+            const passwordError = document.getElementById('passwordError');
+
+            function setFieldError(input, errorEl, message) {
+                input.classList.add('is-invalid');
+                input.classList.remove('is-valid');
+                errorEl.textContent = message;
+            }
+
+            function clearFieldError(input, errorEl) {
+                input.classList.remove('is-invalid');
+                input.classList.add('is-valid');
+            }
+
+            // Clear errors on input
+            emailInput.addEventListener('input', function() {
+                if (this.value.trim()) {
+                    clearFieldError(this, emailError);
+                } else {
+                    this.classList.remove('is-valid', 'is-invalid');
+                }
+            });
+
+            passwordInput.addEventListener('input', function() {
+                if (this.value.trim()) {
+                    clearFieldError(this, passwordError);
+                } else {
+                    this.classList.remove('is-valid', 'is-invalid');
+                }
+            });
+
+            form.addEventListener('submit', function(e) {
+                let isValid = true;
+
+                const email = emailInput.value.trim();
+                const password = passwordInput.value.trim();
+
+                if (!email) {
+                    setFieldError(emailInput, emailError, 'Please enter your email address.');
+                    isValid = false;
+                } else {
+                    // Basic email format check
+                    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailPattern.test(email)) {
+                        setFieldError(emailInput, emailError, 'Please enter a valid email address.');
+                        isValid = false;
+                    } else {
+                        clearFieldError(emailInput, emailError);
+                    }
+                }
+
+                if (!password) {
+                    setFieldError(passwordInput, passwordError, 'Please enter your password.');
+                    isValid = false;
+                } else {
+                    clearFieldError(passwordInput, passwordError);
+                }
+
+                if (!isValid) {
+                    e.preventDefault();
+                }
+            });
+
+            // Map backend error messages to specific fields
+            {% if messages %}
+                {% for message in messages %}
+                    {% if message.message == 'email' %}
+                        setFieldError(emailInput, emailError, 'The email address is not registered.');
+                    {% elif message.message == 'password' %}
+                        setFieldError(passwordInput, passwordError, 'Incorrect password.');
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        })();
+    </script>
 </body>
 
 </html>

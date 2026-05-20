@@ -5,59 +5,123 @@
 <div class="main">
     {% include 'auth/nav.html' %}
     <main class="content px-4 py-3" style="max-height: 90vh; overflow-y: auto;">
-        <div class="mb-4">
-            <h2>Calendar</h2>
-            <p class="text-muted">Manage and view your schedule in one place.</p>
-        </div>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <button type="button" class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#serviceListModal">
-                <i class="fa fa-list pe-1"></i>
-            </button>
-
-            {% if request.user.is_secretary %}
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#postUniformModal">
-                <i class="fa fa-upload pe-1"></i>
-            </button>
-            {% endif %}
-        </div>
-
-        <div class="calendar-container">
-            <div class="calendar-header mb-4">
-                <h3 class="text-center mb-3">{{ month_name }} {{ year }}</h3>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-1">Calendar</h2>
+                <p class="text-muted mb-0">Manage and view your schedule in one place.</p>
             </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#serviceListModal" title="View Uniforms">
+                    <i class="fa fa-list"></i> Uniforms
+                </button>
+                {% if request.user.is_secretary %}
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#postUniformModal">
+                    <i class="fa fa-plus"></i> Post Uniform
+                </button>
+                {% endif %}
+            </div>
+        </div>
 
-            <table class="table table-bordered table-sm">
-                <thead>
-                    <tr>
-                        <th class="text-center">Sun</th>
-                        <th class="text-center">Mon</th>
-                        <th class="text-center">Tue</th>
-                        <th class="text-center">Wed</th>
-                        <th class="text-center">Thu</th>
-                        <th class="text-center">Fri</th>
-                        <th class="text-center">Sat</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for week in calendar_weeks %}
-                    <tr>
-                        {% for day in week %}
-                        <td class="text-center {% if day.is_current_month %}bg-light{% else %}bg-secondary text-white{% endif %}" id="day-{{ day.day }}">
-                            <span class="day-number {% if day.day == 0 %}invisible{% endif %}">{{ day.day }}</span>
-                            {% if day.uniform %}
-                                <div class="uniform-info">
-                                    <span class="uniform-type">{{ day.uniform.uniform_type }}</span><br>
-                                </div>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0 fw-semibold" style="color: #4e57d4;">{{ month_name }} {{ year }}</h4>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="changeMonth(-1)">&larr;</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="changeMonth(1)">&rarr;</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-borderless mb-0" id="calendarTable">
+                        <thead>
+                            <tr>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Sun</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Mon</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Tue</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Wed</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Thu</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Fri</th>
+                                <th class="text-center py-2 fw-semibold text-muted" style="font-size: 0.8rem;">Sat</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for week in calendar_weeks %}
+                            <tr>
+                                {% for day in week %}
+                                <td class="text-center align-top p-1 {% if day.is_current_month %}day-cell{% else %}day-cell-other{% endif %}" id="day-{{ day.day }}">
+                                    <div class="day-number {% if day.day == 0 %}invisible{% endif %} {% if day.is_today %}day-today{% endif %}">
+                                        {{ day.day }}
+                                    </div>
+                                    {% if day.uniform %}
+                                    <div class="uniform-badge" style="background-color: {{ day.uniform.uniform_color }}20; border-left: 3px solid {{ day.uniform.uniform_color }};">
+                                        <small>{{ day.uniform.uniform_type }}</small>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </main>
 </div>
+
+<style>
+    .day-cell {
+        height: 90px;
+        width: 14%;
+        border: 1px solid #f0f0f0;
+        border-radius: 8px;
+        transition: all 0.2s;
+        background: #fff;
+    }
+    .day-cell:hover {
+        background: #f8f9ff;
+        border-color: #4e57d4;
+        cursor: pointer;
+    }
+    .day-cell-other {
+        height: 90px;
+        width: 14%;
+        border: 1px solid #f0f0f0;
+        border-radius: 8px;
+        background: #f9f9f9;
+        opacity: 0.4;
+    }
+    .day-number {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #333;
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        margin-bottom: 2px;
+    }
+    .day-today {
+        background: #4e57d4;
+        color: #fff;
+    }
+    .uniform-badge {
+        font-size: 0.65rem;
+        padding: 3px 5px;
+        border-radius: 4px;
+        margin-top: 2px;
+        color: #555;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #calendarTable td {
+        padding: 4px !important;
+    }
+</style>
 
 <!-- Modal for Viewing Uniforms -->
 <div class="modal fade" id="serviceListModal" tabindex="-1" aria-labelledby="serviceListModalLabel" aria-hidden="true">
@@ -167,6 +231,16 @@
 
 {% block scripts %}
 <script>
+    function changeMonth(delta) {
+        const params = new URLSearchParams(window.location.search);
+        let month = parseInt(params.get('month')) || {{ month }};
+        let year = parseInt(params.get('year')) || {{ year }};
+        month += delta;
+        if (month < 1) { month = 12; year--; }
+        if (month > 12) { month = 1; year++; }
+        window.location.href = '?month=' + month + '&year=' + year;
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         // Check if there are success messages
         {% if messages %}

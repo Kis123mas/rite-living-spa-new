@@ -7,7 +7,7 @@ import re
 class CustomUserRegistrationForm(UserCreationForm):
     class Meta:
         model = CustomUser
-        fields = ['email', 'password1', 'password2']
+        fields = ['email', 'first_name', 'last_name', 'password1', 'password2']
 
     def __init__(self, *args, **kwargs):
         super(CustomUserRegistrationForm, self).__init__(*args, **kwargs)
@@ -17,6 +17,16 @@ class CustomUserRegistrationForm(UserCreationForm):
             'class': 'form-control',
             'placeholder': 'Enter your email',
             'id': 'email'
+        })
+        self.fields['first_name'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Enter your first name',
+            'id': 'first_name'
+        })
+        self.fields['last_name'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Enter your last name',
+            'id': 'last_name'
         })
         self.fields['password1'].widget.attrs.update({
             'class': 'form-control',
@@ -31,6 +41,8 @@ class CustomUserRegistrationForm(UserCreationForm):
 
         # Update field labels
         self.fields['email'].label = "Email Address"
+        self.fields['first_name'].label = "First Name"
+        self.fields['last_name'].label = "Last Name"
         self.fields['password1'].label = "Password"
         self.fields['password2'].label = "Confirm Password"
 
@@ -69,14 +81,13 @@ class CustomUserRegistrationForm(UserCreationForm):
         return True
 
 
-
 class ServiceRenderedForm(forms.ModelForm):
     class Meta:
         model = ServiceRendered
         fields = [
             'staff_name', 'amount', 'mode_of_payment', 'service_type',
             'service_rendered', 'description', 'staff_role',
-            'customer_name', 'invoice_number', 'payment_status'
+            'customer_name', 'invoice_number', 'payment_status', 'start_time', 'end_time'
         ]
         widgets = {
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -89,6 +100,8 @@ class ServiceRenderedForm(forms.ModelForm):
             'staff_role': forms.TextInput(attrs={'class': 'form-control'}),
             'customer_name': forms.TextInput(attrs={'class': 'form-control'}),
             'invoice_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'start_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+            'end_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -173,7 +186,7 @@ class UserProfileForm(forms.ModelForm):
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ['name', 'description', 'price']
+        fields = ['name', 'description', 'price', 'uploaded_file']
 
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter product name'}),
