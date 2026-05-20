@@ -1077,7 +1077,8 @@ def download_report(request):
         # Draw footer
         p.setFont("Helvetica", 8)
         p.setFillColor(colors.grey)
-        p.drawCentredString(width / 2, 20, f"Rite Living Spa — Monthly Report — Page {p.getPageNumber()}")
+        p.drawCentredString(width / 2, 25, f"Kisware Limited — Monthly Report — Page {p.getPageNumber()}")
+        p.drawCentredString(width / 2, 12, "Designed and Developed by Kisware Limited")
         p.setFillColor(colors.black)
 
     def draw_th(x, y_pos, w, texts, widths):
@@ -1108,7 +1109,7 @@ def download_report(request):
     # ---- Header ----
     p.setFont("Helvetica-Bold", 22)
     p.setFillColor(colors.HexColor('#4e57d4'))
-    p.drawCentredString(width / 2, y, "RITE LIVING SPA")
+    p.drawCentredString(width / 2, y, "KISWARE LIMITED")
     p.setFillColor(colors.black)
     p.setFont("Helvetica", 11)
     p.drawCentredString(width / 2, y - 18, f"Monthly Financial Report — {calendar.month_name[month]} {year}")
